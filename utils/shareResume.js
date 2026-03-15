@@ -1,3 +1,19 @@
+const CLOUDINARY_CLOUD = "dvpd0p6si";
+
+export function getCloudinaryResumeUrl(slug) {
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/resume-data/${encodeURIComponent(slug)}`;
+}
+
+export async function fetchCloudinaryResume(slug) {
+  try {
+    const res = await fetch(`${getCloudinaryResumeUrl(slug)}?_t=${Date.now()}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export function toSlug(name) {
   const base = (name || "resume")
     .toLowerCase()

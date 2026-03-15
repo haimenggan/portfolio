@@ -7,7 +7,7 @@ import ResumeWebsite from "../../components/ResumeWebsite";
 import heroSceneConfig from "../../config/heroScene";
 import { cloneDefaultResumeTemplate, defaultPublishedSlug } from "../../data/defaultResumeTemplate";
 import { getResumeInLanguage } from "../../utils/resumeLanguage";
-import { decodeResumeData, loadEditorDraft, loadPageContents, loadProjectMedia, loadResumeSnapshot } from "../../utils/shareResume";
+import { decodeResumeData, fetchCloudinaryResume, loadEditorDraft, loadPageContents, loadProjectMedia, loadResumeSnapshot } from "../../utils/shareResume";
 
 const DARK_THEME_MODEL_PATH = "/hero/mr-mime-pokemon-reboot.glb";
 const LIGHT_THEME_MODEL_PATH = "https://res.cloudinary.com/dvpd0p6si/raw/upload/v1773607605/pe3l1rmtcy65sozxgjgo.glb";
@@ -126,13 +126,15 @@ export default function ResumeSharePage() {
   const [themeReady, setThemeReady] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
 
-  const { data, error } = useMemo(() => {
-    if (!ready) return { data: emptyData, error: "" };
+  const [cloudData, setCloudData] = useState(null);
+
+  const { data, error, needsCloudFetch } = useMemo(() => {
+    if (!ready) return { data: emptyData, error: "", needsCloudFetch: false };
     if (encoded) {
       try {
-        return { data: decodeResumeData(encoded), error: "" };
+        return { data: decodeResumeData(encoded), error: "", needsCloudFetch: false };
       } catch {
-        return { data: emptyData, error: "分享链接数据无效或已损坏。" };
+        return { data: emptyData, error: "分享链接数据无效或已损坏。", needsCloudFetch: false };
       }
     }
 
@@ -146,17 +148,31 @@ export default function ResumeSharePage() {
           media: projectMedia[i] ?? item.media,
           pageContent: pageContents[i] ?? item.pageContent,
         }));
-        return { data: { ...cloneDefaultResumeTemplate(), ...draft, projectItems }, error: "" };
+        return { data: { ...cloneDefaultResumeTemplate(), ...draft, projectItems }, error: "", needsCloudFetch: false };
       }
     }
     const snapshot = loadResumeSnapshot(slug);
-    if (snapshot) return { data: snapshot, error: "" };
+    if (snapshot) return { data: snapshot, error: "", needsCloudFetch: false };
     if (slug === defaultPublishedSlug) {
-      return { data: cloneDefaultResumeTemplate(), error: "" };
+      return { data: cloneDefaultResumeTemplate(), error: "", needsCloudFetch: false };
     }
-    return { data: emptyData, error: "未找到该简历内容，请返回编辑器重新发布。" };
+    return { data: emptyData, error: "", needsCloudFetch: true };
   }, [encoded, ready, slug]);
-  const displayData = getResumeInLanguage(data, lang);
+
+  useEffect(() => {
+    if (!needsCloudFetch || !slug) return;
+    let cancelled = false;
+    fetchCloudinaryResume(slug).then((result) => {
+      if (!cancelled) setCloudData(result);
+    });
+    return () => { cancelled = true; };
+  }, [needsCloudFetch, slug]);
+
+  const resolvedData = cloudData ?? data;
+  const resolvedError = needsCloudFetch
+    ? (cloudData === null ? "" : (cloudData ? "" : "未找到该简历内容，请返回编辑器重新发布。"))
+    : error;
+  const displayData = getResumeInLanguage(resolvedData, lang);
   const anchorPrefix = "share";
   const heroModelConfig = useMemo(
     () => ({
@@ -390,9 +406,9 @@ export default function ResumeSharePage() {
           <section className="rounded-2xl border bg-[var(--panel)] p-8">
             <p className="text-lg">正在加载简历...</p>
           </section>
-        ) : error ? (
+        ) : resolvedError ? (
           <section className="rounded-2xl border bg-[var(--panel)] p-8">
-            <p className="text-lg">{error}</p>
+            <p className="text-lg">{resolvedError}</p>
             <p className="mt-3 text-sm text-[var(--muted)]">请返回编辑器重新生成链接。</p>
           </section>
         ) : (
@@ -410,7 +426,7 @@ export default function ResumeSharePage() {
           </>
         )}
         </main>
-        {ready && !error ? (
+        {ready && !resolvedError ? (
           <nav className="dock-shell fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-[2.2rem] px-4 py-3 shadow-[0_16px_44px_rgba(28,28,28,0.14)] backdrop-blur-xl">
             <ul className="flex items-center gap-2">
               {navItems.map((item) => (

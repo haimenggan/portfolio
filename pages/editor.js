@@ -833,20 +833,34 @@ export default function Home() {
   };
 
   const onPublish = async () => {
-    const currentData = { ...formData };
+    const currentData = mergePageContents({ ...formData });
     setResumeData(currentData);
     const slug = defaultPublishedSlug || toSlug(currentData.name);
-    const saveResult = saveResumeSnapshot(slug, currentData);
-    if (!saveResult.ok) {
-      if (saveResult.reason === "quota") {
-        setCopyStatus(
-          lang === "zh"
-            ? "发布失败：媒体文件过大导致浏览器存储空间不足。请减少媒体数量或压缩视频后再试。"
-            : "Publish failed: Browser storage quota exceeded. Please reduce media files or compress videos."
-        );
-      } else {
-        setCopyStatus(lang === "zh" ? "发布失败，请重试。" : "Publish failed. Please try again.");
-      }
+
+    // Save to localStorage as before
+    saveResumeSnapshot(slug, currentData);
+
+    // Upload full merged data to Cloudinary so production can load it
+    setCopyStatus(lang === "zh" ? "正在发布到云端..." : "Publishing to cloud...");
+    try {
+      const jsonBlob = new Blob([JSON.stringify(currentData)], { type: "application/json" });
+      const jsonFile = new File([jsonBlob], `${slug}.json`, { type: "application/json" });
+      const fd = new FormData();
+      fd.append("file", jsonFile);
+      fd.append("upload_preset", CLOUDINARY_PRESET);
+      fd.append("public_id", `resume-data/${encodeURIComponent(slug)}`);
+      fd.append("resource_type", "raw");
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/raw/upload`, {
+        method: "POST",
+        body: fd,
+      });
+      if (!uploadRes.ok) throw new Error("Cloudinary JSON upload failed");
+    } catch {
+      setCopyStatus(
+        lang === "zh"
+          ? "发布失败：无法上传到云端，请检查网络后重试。"
+          : "Publish failed: Could not upload to cloud. Check your connection and try again."
+      );
       setShareLink("");
       return;
     }

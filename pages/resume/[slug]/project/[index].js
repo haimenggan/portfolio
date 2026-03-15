@@ -4,7 +4,7 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import { cloneDefaultResumeTemplate, defaultPublishedSlug } from "../../../../data/defaultResumeTemplate";
 import { getResumeInLanguage } from "../../../../utils/resumeLanguage";
-import { decodeResumeData, loadEditorDraft, loadPageContents, loadProjectMedia, loadResumeSnapshot } from "../../../../utils/shareResume";
+import { decodeResumeData, fetchCloudinaryResume, loadEditorDraft, loadPageContents, loadProjectMedia, loadResumeSnapshot } from "../../../../utils/shareResume";
 
 function parseInline(text) {
   const parts = text.split(/(\*\*(?:[^*]|\*(?!\*))+\*\*|\*(?!\*)(?:[^*])+\*)/g);
@@ -260,13 +260,15 @@ export default function ProjectPage() {
   const ready = router.isReady;
   const [activeId, setActiveId] = useState("");
 
-  const { data } = useMemo(() => {
-    if (!ready) return { data: null };
+  const [cloudData, setCloudData] = useState(null);
+
+  const { data, needsCloudFetch } = useMemo(() => {
+    if (!ready) return { data: null, needsCloudFetch: false };
     if (encoded) {
       try {
-        return { data: decodeResumeData(encoded) };
+        return { data: decodeResumeData(encoded), needsCloudFetch: false };
       } catch {
-        return { data: null };
+        return { data: null, needsCloudFetch: false };
       }
     }
     if (slug === defaultPublishedSlug) {
@@ -279,16 +281,26 @@ export default function ProjectPage() {
           media: projectMedia[i] ?? item.media,
           pageContent: pageContents[i] ?? item.pageContent,
         }));
-        return { data: { ...cloneDefaultResumeTemplate(), ...draft, projectItems } };
+        return { data: { ...cloneDefaultResumeTemplate(), ...draft, projectItems }, needsCloudFetch: false };
       }
     }
     const snapshot = loadResumeSnapshot(slug);
-    if (snapshot) return { data: snapshot };
-    if (slug === defaultPublishedSlug) return { data: cloneDefaultResumeTemplate() };
-    return { data: null };
+    if (snapshot) return { data: snapshot, needsCloudFetch: false };
+    if (slug === defaultPublishedSlug) return { data: cloneDefaultResumeTemplate(), needsCloudFetch: false };
+    return { data: null, needsCloudFetch: true };
   }, [encoded, ready, slug]);
 
-  const displayData = data ? getResumeInLanguage(data, lang) : null;
+  useEffect(() => {
+    if (!needsCloudFetch || !slug) return;
+    let cancelled = false;
+    fetchCloudinaryResume(slug).then((result) => {
+      if (!cancelled) setCloudData(result);
+    });
+    return () => { cancelled = true; };
+  }, [needsCloudFetch, slug]);
+
+  const resolvedData = cloudData ?? data;
+  const displayData = resolvedData ? getResumeInLanguage(resolvedData, lang) : null;
   const projectItems = Array.isArray(displayData?.projectItems) ? displayData.projectItems : [];
   const project = projectItems[projectIndex] ?? null;
   const sections = project?.pageContent?.sections ?? [];
