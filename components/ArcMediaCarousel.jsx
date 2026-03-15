@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function buildArcMedia(items, count = 6) {
   if (!Array.isArray(items) || items.length === 0) return [];
@@ -20,6 +20,8 @@ function buildArcMedia(items, count = 6) {
 export default function ArcMediaCarousel({ items = [], count = 6, className = "", onActiveIndexChange, variant = "default" }) {
   const [arcAnim, setArcAnim] = useState({ step: 0, phase: 0 });
   const [viewportWidth, setViewportWidth] = useState(1440);
+  const containerRef = useRef(null);
+  const visibleRef = useRef(false);
   const arcMedia = useMemo(() => buildArcMedia(items, count), [items, count]);
   const layoutConfig = useMemo(() => {
     if (variant === "wide") {
@@ -89,6 +91,19 @@ export default function ArcMediaCarousel({ items = [], count = 6, className = ""
   }, [variant]);
 
   useEffect(() => {
+    if (!arcMedia.length || arcMedia.length === 1) return undefined;
+    const el = containerRef.current;
+    if (!el) return undefined;
+
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => { visibleRef.current = entry.isIntersecting; },
+      { threshold: 0 }
+    );
+    visibilityObserver.observe(el);
+    return () => visibilityObserver.disconnect();
+  }, [arcMedia.length]);
+
+  useEffect(() => {
     if (!arcMedia.length) return undefined;
     if (arcMedia.length === 1) return undefined;
 
@@ -100,7 +115,7 @@ export default function ArcMediaCarousel({ items = [], count = 6, className = ""
     const start = performance.now();
 
     const update = (now) => {
-      if (now - lastPaint >= 40) {
+      if (visibleRef.current && now - lastPaint >= 40) {
         const elapsedMs = now - start;
         const cycleIndex = Math.floor(elapsedMs / cycleMs);
         const cycleElapsed = elapsedMs % cycleMs;
@@ -136,6 +151,7 @@ export default function ArcMediaCarousel({ items = [], count = 6, className = ""
 
   return (
     <div
+      ref={containerRef}
       className={`arc-carousel relative w-full ${className}`}
       style={{
         "--arc-card-size": `${layoutConfig.cardSize}px`,

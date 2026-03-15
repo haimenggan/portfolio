@@ -9,8 +9,8 @@
   --dock-icon-muted: rgba(115, 115, 115, 0.64);
   --line: #dfdfdb;
   --on-accent: #ffffff;
-  --font-body: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-display: "Avenir Next", "Optima", "Gill Sans", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-body: var(--font-manrope), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: var(--font-manrope), "PingFang SC", "Hiragino Sans GB", sans-serif;
   --liquid-surface: rgba(255, 255, 255, 0.42);
   --liquid-surface-strong: rgba(255, 255, 255, 0.62);
   --liquid-border: rgba(255, 255, 255, 0.58);
@@ -22,7 +22,7 @@
   --liquid-shadow-hover:
     0 16px 36px rgba(110, 124, 158, 0.16),
     0 1px 0 rgba(255, 255, 255, 0.24) inset;
-  --liquid-blur: 18px;
+  --liquid-blur: 8px;
   --liquid-reflect-a: rgba(170, 193, 241, 0.16);
   --liquid-reflect-b: rgba(255, 220, 196, 0.14);
   --liquid-reflect-c: rgba(222, 229, 245, 0.12);
@@ -566,10 +566,9 @@ h3,
   z-index: -2;
   inset: -10vh -6vw;
   background:
-    radial-gradient(42rem 26rem at 10% 18%, var(--liquid-reflect-a) 0%, transparent 70%),
-    radial-gradient(36rem 24rem at 86% 14%, var(--liquid-reflect-b) 0%, transparent 72%),
-    radial-gradient(40rem 28rem at 52% 100%, var(--liquid-reflect-c) 0%, transparent 74%);
-  filter: blur(12px);
+    radial-gradient(72rem 48rem at 10% 18%, var(--liquid-reflect-a) 0%, transparent 68%),
+    radial-gradient(62rem 44rem at 86% 14%, var(--liquid-reflect-b) 0%, transparent 70%),
+    radial-gradient(68rem 52rem at 52% 100%, var(--liquid-reflect-c) 0%, transparent 72%);
   opacity: 0.95;
 }
 
@@ -582,10 +581,7 @@ h3,
 }
 
 .resume-share.theme-light {
-  --bg:
-    radial-gradient(1200px 760px at 90% -10%, #eef4ff 0%, transparent 62%),
-    radial-gradient(980px 460px at -6% 108%, #f6efe9 0%, transparent 68%),
-    #f8f8f6;
+  --bg: #ffffff;
   --panel: #ffffff;
   --panel-soft: #f4f5f7;
   --text: #161616;
@@ -1290,21 +1286,20 @@ h3,
 .wave-section .wave-item {
   opacity: 0;
   transform: translate3d(0, 20px, 0) scale(0.99);
-  filter: blur(2px);
-  will-change: transform, opacity, filter;
 }
 
 .wave-section.wave-active .wave-item {
+  will-change: transform, opacity;
   animation: waveIn 760ms var(--wave-delay, 0ms) cubic-bezier(0.22, 0.68, 0.18, 1) both;
 }
 
 .wave-section .wave-subitem {
   opacity: 0;
   transform: translate3d(0, 16px, 0) scale(0.994);
-  will-change: transform, opacity;
 }
 
 .wave-section.wave-active .wave-subitem {
+  will-change: transform, opacity;
   animation: waveIn 700ms calc(var(--wave-delay, 0ms) + (var(--wave-index, 0) * 55ms)) cubic-bezier(0.22, 0.68, 0.18, 1) both;
 }
 
@@ -1320,12 +1315,10 @@ h3,
   0% {
     opacity: 0;
     transform: translate3d(0, 20px, 0) scale(0.99);
-    filter: blur(2px);
   }
   45% {
     opacity: 1;
     transform: translate3d(0, -8px, 0) scale(1.004);
-    filter: blur(0);
   }
   70% {
     transform: translate3d(0, 2px, 0) scale(0.999);
@@ -1333,7 +1326,6 @@ h3,
   100% {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);
-    filter: blur(0);
   }
 }
 
@@ -1356,8 +1348,6 @@ h3,
     linear-gradient(180deg, color-mix(in srgb, var(--liquid-surface-strong) 82%, transparent) 0%, color-mix(in srgb, var(--liquid-surface) 90%, transparent) 58%, color-mix(in srgb, var(--liquid-surface) 78%, transparent) 100%);
   border: 1px solid var(--liquid-border);
   box-shadow: var(--liquid-shadow);
-  backdrop-filter: blur(var(--liquid-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--liquid-blur)) saturate(140%);
 }
 
 .soft-pill {
@@ -1366,8 +1356,6 @@ h3,
     linear-gradient(180deg, color-mix(in srgb, var(--liquid-surface-strong) 72%, transparent) 0%, color-mix(in srgb, var(--liquid-surface) 84%, transparent) 60%, color-mix(in srgb, var(--liquid-surface) 72%, transparent) 100%);
   border: 1px solid var(--liquid-border);
   box-shadow: var(--liquid-shadow);
-  backdrop-filter: blur(calc(var(--liquid-blur) * 0.86)) saturate(135%);
-  -webkit-backdrop-filter: blur(calc(var(--liquid-blur) * 0.86)) saturate(135%);
 }
 
 .project-detail-collapsed {
@@ -1547,6 +1535,20 @@ h3,
   --note-trail: rgba(152, 188, 255, 0.16);
 }
 
+.hero-canvas-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 40% 30% at 50% 55%, rgba(200, 210, 230, 0.18) 0%, transparent 70%);
+  animation: heroLoaderPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes heroLoaderPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 .model-interaction-stage--light {
   --note-color: rgba(20, 28, 42, 0.96);
   --note-shadow: rgba(0, 0, 0, 0.12);
@@ -1607,6 +1609,16 @@ h3,
 
 .hero-stage {
   isolation: isolate;
+}
+
+/* CSS scroll-snap — replaces non-passive JS wheel handler to eliminate scroll latency */
+html {
+  scroll-snap-type: y proximity;
+}
+
+[data-snap-section="true"] {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
 }
 
 .hero-copy-shell {

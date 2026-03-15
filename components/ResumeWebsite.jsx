@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ArcMediaCarousel from "./ArcMediaCarousel";
@@ -39,7 +40,7 @@ function ChevronIcon({ expanded }) {
 
 export default function ResumeWebsite({
   data,
-  lang = "zh",
+  lang = "en",
   onSectionNavigate,
   sectionIdPrefix = "",
   heroFullscreen = false,
@@ -47,6 +48,7 @@ export default function ResumeWebsite({
   heroModelConfig = null,
   heroInteractionTheme = "light",
   heroInteractionAnchorY = "70%",
+  projectPageBase = null,
 }) {
   const experiences = parseItems(data.experiences, ["period", "role", "company", "detail"]);
   const fallbackProjects = parseItems(data.projects, ["name", "detail"]);
@@ -119,8 +121,6 @@ export default function ResumeWebsite({
   const [talkMessage, setTalkMessage] = useState("");
   const rootRef = useRef(null);
   const mediaTrackRef = useRef(null);
-  const snapLockRef = useRef(false);
-  const snapReleaseTimerRef = useRef(null);
   const canJumpToEditor = typeof onSectionNavigate === "function";
   const makeId = (key) => (sectionIdPrefix ? `${sectionIdPrefix}-${key}` : undefined);
   const sectionShellClass = heroFullscreen ? "section-shell" : "";
@@ -199,96 +199,8 @@ export default function ResumeWebsite({
     }));
   };
 
-  useEffect(() => {
-    if (!heroFullscreen) return undefined;
-
-    const isEditableTarget = (target) => {
-      if (!(target instanceof Element)) return false;
-      return Boolean(target.closest("input, textarea, select, button, video, [data-allow-native-scroll='true']"));
-    };
-
-    const findScrollableAncestor = (target) => {
-      if (!(target instanceof Element)) return null;
-      let node = target;
-      while (node && node !== document.body) {
-        const style = window.getComputedStyle(node);
-        const overflowY = style.overflowY;
-        const canScroll = (overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight;
-        if (canScroll) return node;
-        node = node.parentElement;
-      }
-      return null;
-    };
-
-    const onWheel = (event) => {
-      if (snapLockRef.current) {
-        event.preventDefault();
-        return;
-      }
-
-      if (Math.abs(event.deltaY) < 6) return;
-      if (isEditableTarget(event.target)) return;
-
-      const innerScrollable = findScrollableAncestor(event.target);
-      if (innerScrollable) {
-        const { scrollTop, scrollHeight, clientHeight } = innerScrollable;
-        const canScrollDown = scrollTop + clientHeight < scrollHeight - 2;
-        const canScrollUp = scrollTop > 2;
-        if ((event.deltaY > 0 && canScrollDown) || (event.deltaY < 0 && canScrollUp)) {
-          return;
-        }
-      }
-
-      const root = rootRef.current;
-      if (!root) return;
-      const sections = Array.from(root.querySelectorAll("[data-snap-section='true']"));
-      if (sections.length < 2) return;
-
-      const viewportAnchor = window.innerHeight * 0.24;
-      const sectionRects = sections.map((section) => section.getBoundingClientRect());
-      const anchoredIndex = sectionRects.findIndex((rect) => rect.top <= viewportAnchor && rect.bottom >= viewportAnchor);
-      const currentIndex =
-        anchoredIndex >= 0
-          ? anchoredIndex
-          : sections.reduce(
-              (best, section, index) => {
-                const distance = Math.abs(section.getBoundingClientRect().top - viewportAnchor);
-                return distance < best.distance ? { index, distance } : best;
-              },
-              { index: 0, distance: Number.POSITIVE_INFINITY }
-            ).index;
-      const currentRect = sectionRects[currentIndex];
-      const isLongSection = currentIndex > 0 && currentRect && currentRect.height > window.innerHeight * 1.02;
-      if (isLongSection) {
-        return;
-      }
-
-      const nextIndex = event.deltaY > 0 ? Math.min(sections.length - 1, currentIndex + 1) : Math.max(0, currentIndex - 1);
-      if (nextIndex === currentIndex) {
-        event.preventDefault();
-        return;
-      }
-
-      snapLockRef.current = true;
-      event.preventDefault();
-      sections[nextIndex].scrollIntoView({ behavior: "smooth", block: "start" });
-
-      if (snapReleaseTimerRef.current) {
-        window.clearTimeout(snapReleaseTimerRef.current);
-      }
-      snapReleaseTimerRef.current = window.setTimeout(() => {
-        snapLockRef.current = false;
-      }, 620);
-    };
-
-    window.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      window.removeEventListener("wheel", onWheel);
-      if (snapReleaseTimerRef.current) {
-        window.clearTimeout(snapReleaseTimerRef.current);
-      }
-    };
-  }, [heroFullscreen]);
+  // Scroll snapping is handled via CSS scroll-snap (see .hero-snap-container / .hero-snap-section)
+  // to avoid non-passive wheel listeners that block the compositor and cause scroll latency.
 
   useEffect(() => {
     const root = rootRef.current;
@@ -299,16 +211,10 @@ export default function ResumeWebsite({
       (entries) => {
         entries.forEach((entry) => {
           const section = entry.target;
-          if (entry.isIntersecting) {
-            if (section.dataset.waveVisible === "1") return;
+          if (entry.isIntersecting && section.dataset.waveVisible !== "1") {
             section.dataset.waveVisible = "1";
-            section.classList.remove("wave-active");
-            void section.offsetWidth;
             section.classList.add("wave-active");
-            return;
           }
-          section.dataset.waveVisible = "0";
-          section.classList.remove("wave-active");
         });
       },
       { threshold: 0.18, rootMargin: "0px 0px -12% 0px" }
@@ -453,6 +359,133 @@ export default function ResumeWebsite({
           )}
         </header>
       )}
+
+      <div
+        id={makeId("projects")}
+        data-snap-section="true"
+        data-wave-section="true"
+        className={`wave-section ${sectionShellClass} section-space motion-fade ${getJumpableClass()}`}
+        onClick={() => jumpToEditor("projects")}
+      >
+        {renderSectionTitle(labels.projects)}
+        {projectItems.length > 0 ? (
+          <div className={`wave-item relative mt-8 w-full pl-0 ${heroFullscreen ? "mx-auto max-w-3xl" : ""}`} style={{ "--wave-delay": "90ms" }}>
+            <div className="space-y-8">
+              {projectItems.map((project, index) => {
+                const expanded = Boolean(expandedProjectMap[index]);
+                return (
+                  <div
+                    key={`${project.title}-${index}`}
+                    className="timeline-item wave-subitem relative grid grid-cols-[24px_1fr] gap-5 md:gap-6"
+                    style={{ "--wave-index": index }}
+                  >
+                    <div className="timeline-axis relative self-stretch">
+                      {index > 0 && (
+                        <span className="timeline-link absolute left-1/2 top-[-2rem] h-[49px] w-px -translate-x-1/2 border-l border-dashed border-[var(--line)]" />
+                      )}
+                      {index < projectItems.length - 1 && (
+                        <span className="timeline-link absolute bottom-[-2rem] left-1/2 top-[17px] w-px -translate-x-1/2 border-l border-dashed border-[var(--line)]" />
+                      )}
+                      <span className="timeline-dot absolute left-1/2 top-[10px] h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-[rgba(154,158,168,0.38)] bg-[rgba(255,255,255,0.42)]" />
+                    </div>
+                    <div className="min-w-0">
+                      {project.period && (
+                        <p className="mb-2 whitespace-nowrap text-base font-semibold tracking-[0.02em] text-[var(--muted)] md:text-lg">
+                          {project.period}
+                        </p>
+                      )}
+                      {projectPageBase ? (
+                        <Link
+                          href={`${projectPageBase}/${index}`}
+                          onClick={(event) => event.stopPropagation()}
+                          className="project-timeline-card timeline-card relative motion-card soft-panel block rounded-xl p-5 transition hover:opacity-90"
+                        >
+                          <div className={`grid gap-4 ${project.media ? "md:grid-cols-[180px_1fr]" : "grid-cols-1"}`}>
+                            {project.media && (
+                              <div className="project-media-frame soft-panel h-[180px] w-[180px] self-start overflow-hidden rounded-lg">
+                                {project.media.type === "image" ? (
+                                  <Image
+                                    src={project.media.url}
+                                    alt={project.media.name || "project media"}
+                                    width={640}
+                                    height={400}
+                                    unoptimized
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <video className="h-full w-full object-cover">
+                                    <source src={project.media.url} />
+                                  </video>
+                                )}
+                              </div>
+                            )}
+                            <div>
+                              <h3 className="text-xl font-semibold">{project.title || labels.project}</h3>
+                              {project.subtitle && <p className="mt-1 text-sm text-[var(--muted)]">{project.subtitle}</p>}
+                              {project.summary && <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{project.summary}</p>}
+                            </div>
+                          </div>
+                        </Link>
+                      ) : (
+                        <article className="project-timeline-card timeline-card relative motion-card soft-panel rounded-xl p-5" tabIndex={0}>
+                          <div className={`grid gap-4 ${project.media ? "md:grid-cols-[180px_1fr]" : "grid-cols-1"}`}>
+                            {project.media && (
+                              <div className="project-media-frame soft-panel h-[180px] w-[180px] self-start overflow-hidden rounded-lg">
+                                {project.media.type === "image" ? (
+                                  <Image
+                                    src={project.media.url}
+                                    alt={project.media.name || "project media"}
+                                    width={640}
+                                    height={400}
+                                    unoptimized
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <video controls className="h-full w-full object-cover">
+                                    <source src={project.media.url} />
+                                  </video>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="relative pb-12">
+                              <h3 className="text-xl font-semibold">{project.title || labels.project}</h3>
+                              {project.subtitle && <p className="mt-1 text-sm text-[var(--muted)]">{project.subtitle}</p>}
+                              {project.summary && <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{project.summary}</p>}
+
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleProjectDetails(index);
+                                }}
+                                className="absolute bottom-0 right-0 inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs tracking-[0.12em] text-[var(--muted)] transition hover:text-[var(--text)]"
+                              >
+                                {expanded ? (lang === "en" ? "HIDE" : "收起") : lang === "en" ? "DETAILS" : "详情"}
+                                <ChevronIcon expanded={expanded} />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className={expanded ? "project-detail-expanded" : "project-detail-collapsed"}>
+                            <div className="mt-4 border-t pt-4">
+                              <p className="indent-8 text-sm leading-8 text-[var(--muted)]">
+                                {project.details || project.summary || ""}
+                              </p>
+                            </div>
+                          </div>
+                        </article>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="wave-item text-[var(--muted)]" style={{ "--wave-delay": "90ms" }}>{labels.noProject}</p>
+        )}
+      </div>
 
       <div
         id={makeId("about")}
@@ -601,99 +634,6 @@ export default function ResumeWebsite({
           </div>
         </div>
       )}
-
-      <div
-        id={makeId("projects")}
-        data-snap-section="true"
-        data-wave-section="true"
-        className={`wave-section ${sectionShellClass} section-space motion-fade ${getJumpableClass()}`}
-        onClick={() => jumpToEditor("projects")}
-      >
-        {renderSectionTitle(labels.projects)}
-        {projectItems.length > 0 ? (
-          <div className={`wave-item relative mt-8 w-full pl-0 ${heroFullscreen ? "mx-auto max-w-3xl" : ""}`} style={{ "--wave-delay": "90ms" }}>
-            <div className="space-y-8">
-              {projectItems.map((project, index) => {
-                const expanded = Boolean(expandedProjectMap[index]);
-                return (
-                  <div
-                    key={`${project.title}-${index}`}
-                    className="timeline-item wave-subitem relative grid grid-cols-[24px_1fr] gap-5 md:gap-6"
-                    style={{ "--wave-index": index }}
-                  >
-                    <div className="timeline-axis relative self-stretch">
-                      {index > 0 && (
-                        <span className="timeline-link absolute left-1/2 top-[-2rem] h-[49px] w-px -translate-x-1/2 border-l border-dashed border-[var(--line)]" />
-                      )}
-                      {index < projectItems.length - 1 && (
-                        <span className="timeline-link absolute bottom-[-2rem] left-1/2 top-[17px] w-px -translate-x-1/2 border-l border-dashed border-[var(--line)]" />
-                      )}
-                      <span className="timeline-dot absolute left-1/2 top-[10px] h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-[rgba(154,158,168,0.38)] bg-[rgba(255,255,255,0.42)]" />
-                    </div>
-                    <div className="min-w-0">
-                      {project.period && (
-                        <p className="mb-2 whitespace-nowrap text-base font-semibold tracking-[0.02em] text-[var(--muted)] md:text-lg">
-                          {project.period}
-                        </p>
-                      )}
-                      <article className="project-timeline-card timeline-card relative motion-card soft-panel rounded-xl p-5" tabIndex={0}>
-                        <div className={`grid gap-4 ${project.media ? "md:grid-cols-[180px_1fr]" : "grid-cols-1"}`}>
-                          {project.media && (
-                            <div className="project-media-frame soft-panel h-[180px] w-[180px] self-start overflow-hidden rounded-lg">
-                              {project.media.type === "image" ? (
-                                <Image
-                                  src={project.media.url}
-                                  alt={project.media.name || "project media"}
-                                  width={640}
-                                  height={400}
-                                  unoptimized
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <video controls className="h-full w-full object-cover">
-                                  <source src={project.media.url} />
-                                </video>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="relative pb-12">
-                            <h3 className="text-xl font-semibold">{project.title || labels.project}</h3>
-                            {project.subtitle && <p className="mt-1 text-sm text-[var(--muted)]">{project.subtitle}</p>}
-                            {project.summary && <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{project.summary}</p>}
-
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                toggleProjectDetails(index);
-                              }}
-                              className="absolute bottom-0 right-0 inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs tracking-[0.12em] text-[var(--muted)] transition hover:text-[var(--text)]"
-                            >
-                              {expanded ? (lang === "en" ? "HIDE" : "收起") : lang === "en" ? "DETAILS" : "详情"}
-                              <ChevronIcon expanded={expanded} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className={expanded ? "project-detail-expanded" : "project-detail-collapsed"}>
-                          <div className="mt-4 border-t pt-4">
-                            <p className="indent-8 text-sm leading-8 text-[var(--muted)]">
-                              {project.details || project.summary || ""}
-                            </p>
-                          </div>
-                        </div>
-                      </article>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <p className="wave-item text-[var(--muted)]" style={{ "--wave-delay": "90ms" }}>{labels.noProject}</p>
-        )}
-      </div>
 
       {customSections
         .filter((section) => section.title.trim() || section.content.trim() || section.mediaItems.length > 0)
