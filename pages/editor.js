@@ -131,6 +131,7 @@ export default function Home() {
   const [lang, setLang] = useState("en");
   const [shareLink, setShareLink] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
+  const [publishToast, setPublishToast] = useState(null); // { type: 'loading'|'success'|'error', message: string }
   const [generateStatus, setGenerateStatus] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
   const [aboutUploadStatus, setAboutUploadStatus] = useState("");
@@ -841,7 +842,7 @@ export default function Home() {
     saveResumeSnapshot(slug, currentData);
 
     // Upload full merged data to Cloudinary via server API so production can load it
-    setCopyStatus(lang === "zh" ? "正在发布到云端..." : "Publishing to cloud...");
+    setPublishToast({ type: "loading", message: lang === "zh" ? "正在发布到云端..." : "Publishing to cloud..." });
     try {
       const uploadRes = await fetch("/api/save-resume", {
         method: "POST",
@@ -853,11 +854,11 @@ export default function Home() {
         throw new Error(err.error || "Upload failed");
       }
     } catch (err) {
-      setCopyStatus(
-        lang === "zh"
-          ? `发布失败：${err.message || "无法上传到云端，请检查网络后重试。"}`
-          : `Publish failed: ${err.message || "Could not upload to cloud. Check your connection and try again."}`
-      );
+      const msg = lang === "zh"
+        ? `发布失败：${err.message || "无法上传到云端，请检查网络后重试。"}`
+        : `Publish failed: ${err.message || "Could not upload to cloud. Check your connection and try again."}`;
+      setCopyStatus(msg);
+      setPublishToast({ type: "error", message: msg });
       setShareLink("");
       return;
     }
@@ -866,28 +867,20 @@ export default function Home() {
     setShareLink(link);
     const popup = window.open(link, "_blank", "noopener,noreferrer");
 
+    let successMsg;
     try {
       await navigator.clipboard.writeText(link);
-      setCopyStatus(
-        lang === "zh"
-          ? popup
-            ? "已发布并复制分享链接"
-            : "已发布并复制分享链接（浏览器可能拦截了新窗口）"
-          : popup
-            ? "Published and link copied."
-            : "Published and link copied (popup may be blocked)."
-      );
+      successMsg = lang === "zh"
+        ? popup ? "已发布并复制分享链接" : "已发布并复制分享链接（浏览器可能拦截了新窗口）"
+        : popup ? "Published! Link copied to clipboard." : "Published! Link copied (popup may be blocked).";
     } catch {
-      setCopyStatus(
-        lang === "zh"
-          ? popup
-            ? "已发布，分享链接请手动复制"
-            : "已发布，但浏览器可能拦截新窗口；请手动复制链接打开"
-          : popup
-            ? "Published. Please copy the link manually."
-            : "Published, but popup may be blocked; please open the copied link manually."
-      );
+      successMsg = lang === "zh"
+        ? popup ? "已发布，分享链接请手动复制" : "已发布，但浏览器可能拦截新窗口；请手动复制链接打开"
+        : popup ? "Published! Copy the link below." : "Published! Popup may be blocked — copy the link below.";
     }
+    setCopyStatus(successMsg);
+    setPublishToast({ type: "success", message: successMsg });
+    setTimeout(() => setPublishToast(null), 5000);
   };
 
   const resetAll = () => {
@@ -941,6 +934,32 @@ export default function Home() {
         <meta name="description" content="Input your info and generate your own resume website" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+
+      {publishToast && (
+        <div
+          className={`fixed top-4 left-1/2 z-[9999] -translate-x-1/2 flex items-center gap-3 rounded-2xl px-5 py-3.5 shadow-xl text-sm font-medium transition-all ${
+            publishToast.type === "success"
+              ? "bg-[#1a1a1a] text-white"
+              : publishToast.type === "error"
+              ? "bg-red-600 text-white"
+              : "bg-[#1a1a1a] text-white"
+          }`}
+          style={{ minWidth: 260, maxWidth: 480 }}
+        >
+          {publishToast.type === "loading" && (
+            <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+          )}
+          {publishToast.type === "success" && <span className="shrink-0">✓</span>}
+          {publishToast.type === "error" && <span className="shrink-0">✕</span>}
+          <span>{publishToast.message}</span>
+          {publishToast.type !== "loading" && (
+            <button type="button" onClick={() => setPublishToast(null)} className="ml-auto shrink-0 opacity-60 hover:opacity-100">✕</button>
+          )}
+        </div>
+      )}
 
       <main className="editor-page mx-auto w-full max-w-[1640px] px-6 py-8 md:px-10 md:py-10 xl:px-12">
         <div className="editor-header-card mb-6 flex flex-col gap-4 rounded-[2rem] border bg-[var(--panel)] px-6 py-5 md:flex-row md:items-center md:justify-between">
