@@ -14,13 +14,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const publicId = `resume-data/${encodeURIComponent(slug)}`;
     const jsonString = JSON.stringify(data);
 
     const fd = new FormData();
     fd.append("file", new Blob([jsonString], { type: "application/json" }), `${slug}.json`);
     fd.append("upload_preset", PRESET);
-    fd.append("public_id", publicId);
 
     const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/raw/upload`, {
       method: "POST",

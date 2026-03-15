@@ -5,9 +5,11 @@ export function getCloudinaryResumeUrl(slug) {
 }
 
 export async function fetchCloudinaryResume(slug) {
+  const encoded = encodeURIComponent(slug);
   const candidates = [
-    `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/resume-data/${encodeURIComponent(slug)}`,
-    `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/${encodeURIComponent(slug)}`,
+    `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/portfolio_uploads/${encoded}`,
+    `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/resume-data/${encoded}`,
+    `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/${encoded}`,
   ];
   const ts = Date.now();
   for (const url of candidates) {
