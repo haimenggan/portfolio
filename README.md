@@ -33,7 +33,7 @@ MotionCV lets users fill in resume fields, upload media, preview in real time, a
 - Tailwind CSS 4
 - Intersection Observer (scroll reveal)
 
-## Quick Start
+## Quick Star
 
 ```bash
 npm install
