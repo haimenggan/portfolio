@@ -153,9 +153,7 @@ export default function ResumeSharePage() {
     }
     const snapshot = loadResumeSnapshot(slug);
     if (snapshot) return { data: snapshot, error: "", needsCloudFetch: false };
-    if (slug === defaultPublishedSlug) {
-      return { data: cloneDefaultResumeTemplate(), error: "", needsCloudFetch: false };
-    }
+    // Try Cloudinary for all slugs (including defaultPublishedSlug) when no local data found
     return { data: emptyData, error: "", needsCloudFetch: true };
   }, [encoded, ready, slug]);
 
@@ -163,7 +161,7 @@ export default function ResumeSharePage() {
     if (!needsCloudFetch || !slug) return;
     let cancelled = false;
     fetchCloudinaryResume(slug).then((result) => {
-      if (!cancelled) setCloudData(result);
+      if (!cancelled) setCloudData(result ?? (slug === defaultPublishedSlug ? cloneDefaultResumeTemplate() : null));
     });
     return () => { cancelled = true; };
   }, [needsCloudFetch, slug]);

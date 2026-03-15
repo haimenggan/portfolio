@@ -286,7 +286,6 @@ export default function ProjectPage() {
     }
     const snapshot = loadResumeSnapshot(slug);
     if (snapshot) return { data: snapshot, needsCloudFetch: false };
-    if (slug === defaultPublishedSlug) return { data: cloneDefaultResumeTemplate(), needsCloudFetch: false };
     return { data: null, needsCloudFetch: true };
   }, [encoded, ready, slug]);
 
@@ -294,7 +293,7 @@ export default function ProjectPage() {
     if (!needsCloudFetch || !slug) return;
     let cancelled = false;
     fetchCloudinaryResume(slug).then((result) => {
-      if (!cancelled) setCloudData(result);
+      if (!cancelled) setCloudData(result ?? (slug === defaultPublishedSlug ? cloneDefaultResumeTemplate() : null));
     });
     return () => { cancelled = true; };
   }, [needsCloudFetch, slug]);
