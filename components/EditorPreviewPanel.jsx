@@ -183,6 +183,37 @@ export default function EditorPreviewPanel({ data, lang = "zh", onSectionNavigat
         </PreviewSection>
 
         <PreviewSection
+          title={labels.projectTitle}
+          hint={labels.projectHint}
+          actionLabel={labels.jump}
+          onAction={() => onSectionNavigate?.("projects")}
+        >
+          {projects.length > 0 ? (
+            <div className="editor-preview-project-grid">
+              {projects.map((project, index) => (
+                <article key={`${project.title}-${index}`} className="editor-preview-project-card">
+                  <div className="editor-preview-project-head">
+                    <div className="min-w-0">
+                      <p className="editor-preview-item-period">{project.period}</p>
+                      <h4 className="editor-preview-item-title">{project.title}</h4>
+                    </div>
+                    {project.media ? (
+                      <span className="editor-preview-mini-chip">
+                        {labels.attachedMedia} · {project.media.type === "video" ? (lang === "en" ? "Video" : "视频") : lang === "en" ? "Image" : "图片"}
+                      </span>
+                    ) : null}
+                  </div>
+                  {project.subtitle ? <p className="editor-preview-project-subtitle">{project.subtitle}</p> : null}
+                  <p className="editor-preview-item-body">{project.summary || project.details}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="editor-preview-empty">{labels.emptyProjects}</div>
+          )}
+        </PreviewSection>
+
+        <PreviewSection
           title={labels.profileTitle}
           hint={labels.profileHint}
           actionLabel={labels.jump}
@@ -225,37 +256,6 @@ export default function EditorPreviewPanel({ data, lang = "zh", onSectionNavigat
               </article>
             ))}
           </div>
-        </PreviewSection>
-
-        <PreviewSection
-          title={labels.projectTitle}
-          hint={labels.projectHint}
-          actionLabel={labels.jump}
-          onAction={() => onSectionNavigate?.("projects")}
-        >
-          {projects.length > 0 ? (
-            <div className="editor-preview-project-grid">
-              {projects.map((project, index) => (
-                <article key={`${project.title}-${index}`} className="editor-preview-project-card">
-                  <div className="editor-preview-project-head">
-                    <div className="min-w-0">
-                      <p className="editor-preview-item-period">{project.period}</p>
-                      <h4 className="editor-preview-item-title">{project.title}</h4>
-                    </div>
-                    {project.media ? (
-                      <span className="editor-preview-mini-chip">
-                        {labels.attachedMedia} · {project.media.type === "video" ? (lang === "en" ? "Video" : "视频") : lang === "en" ? "Image" : "图片"}
-                      </span>
-                    ) : null}
-                  </div>
-                  {project.subtitle ? <p className="editor-preview-project-subtitle">{project.subtitle}</p> : null}
-                  <p className="editor-preview-item-body">{project.summary || project.details}</p>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="editor-preview-empty">{labels.emptyProjects}</div>
-          )}
         </PreviewSection>
 
         <PreviewSection

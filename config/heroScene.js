@@ -117,7 +117,7 @@ const heroSceneConfig = {
   },
   ui: {
     heading: {
-      kicker: "MotionCV",
+      kicker: "haimeng's portfolio",
       title: "Digital Presence Object",
       subtitle: "Minimal. Sculptural. Interactive.",
       crosshair: "+",

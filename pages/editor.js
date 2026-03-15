@@ -1,6 +1,7 @@
 import Head from "next/head";
 import { useEffect, useRef, useState } from "react";
 import EditorPreviewPanel from "../components/EditorPreviewPanel";
+import ProjectCaseStudyEditor from "../components/ProjectCaseStudyEditor";
 import LanguageToggle from "../components/LanguageToggle";
 import {
   buildTemplateDraft,
@@ -9,7 +10,7 @@ import {
   defaultResumeTemplateVersion,
   shouldSeedImportedTemplate,
 } from "../data/defaultResumeTemplate";
-import { saveResumeSnapshot, toSlug } from "../utils/shareResume";
+import { loadPageContents, loadProjectMedia, savePageContents, saveProjectMedia, saveResumeSnapshot, toSlug } from "../utils/shareResume";
 import { getResumeInLanguage } from "../utils/resumeLanguage";
 
 const starter = cloneDefaultResumeTemplate();
@@ -18,11 +19,13 @@ const MAX_MAIN_MEDIA = 6;
 const MAX_CUSTOM_SECTIONS = 3;
 const MAX_CUSTOM_MEDIA = 6;
 const MAX_PROJECT_ITEMS = 8;
-const MAX_IMAGE_MB = 2;
-const MAX_VIDEO_MB = 8;
+const MAX_IMAGE_MB = 10;
+const MAX_VIDEO_MB = 50;
 const MAX_AUDIO_SECONDS = 10;
 const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024;
 const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
+const CLOUDINARY_CLOUD = "dvpd0p6si";
+const CLOUDINARY_PRESET = "portfolio_uploads";
 const DRAFT_KEY = "motioncv:editor:draft";
 const TEMPLATE_VERSION_KEY = "motioncv:editor:template-version";
 const EDITOR_QUICK_LINKS = [
@@ -48,6 +51,7 @@ function createProjectItem() {
     summary: "",
     details: "",
     media: null,
+    pageContent: { sections: [] },
   };
 }
 
@@ -72,6 +76,20 @@ function migrateLegacyProjects(rawProjects = "") {
   });
 }
 
+function mergePageContents(data) {
+  const pageContents = loadPageContents();
+  const projectMedia = loadProjectMedia();
+  if (!Array.isArray(data.projectItems)) return data;
+  return {
+    ...data,
+    projectItems: data.projectItems.map((item, i) => ({
+      ...item,
+      media: projectMedia[i] ?? item.media,
+      pageContent: pageContents[i] ?? item.pageContent,
+    })),
+  };
+}
+
 function getInitialDraft() {
   if (typeof window === "undefined") return starter;
   try {
@@ -80,12 +98,13 @@ function getInitialDraft() {
     const savedVersion = window.localStorage.getItem(TEMPLATE_VERSION_KEY);
     if (savedVersion !== defaultResumeTemplateVersion) {
       const imported = buildTemplateDraft(saved);
+      const withPages = mergePageContents(imported);
       window.localStorage.setItem(DRAFT_KEY, JSON.stringify(imported));
       window.localStorage.setItem(TEMPLATE_VERSION_KEY, defaultResumeTemplateVersion);
-      return imported;
+      return withPages;
     }
-    if (!raw) return starter;
-    if (!saved || typeof saved !== "object") return starter;
+    if (!raw) return mergePageContents(starter);
+    if (!saved || typeof saved !== "object") return mergePageContents(starter);
     const merged = shouldSeedImportedTemplate(saved)
       ? cloneDefaultResumeTemplate()
       : { ...cloneDefaultResumeTemplate(), ...saved };
@@ -100,7 +119,7 @@ function getInitialDraft() {
       const migrated = migrateLegacyProjects(merged.projects);
       merged.projectItems = migrated.length ? migrated : starter.projectItems;
     }
-    return merged;
+    return mergePageContents(merged);
   } catch {
     return starter;
   }
@@ -109,7 +128,7 @@ function getInitialDraft() {
 export default function Home() {
   const [formData, setFormData] = useState(starter);
   const [resumeData, setResumeData] = useState(starter);
-  const [lang, setLang] = useState("zh");
+  const [lang, setLang] = useState("en");
   const [shareLink, setShareLink] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
   const [generateStatus, setGenerateStatus] = useState("");
@@ -121,6 +140,8 @@ export default function Home() {
   const [customUploadStatus, setCustomUploadStatus] = useState({});
   const [projectUploadStatus, setProjectUploadStatus] = useState({});
   const [activeEditorAnchor, setActiveEditorAnchor] = useState("");
+  const [pageEditorIndex, setPageEditorIndex] = useState(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState(""); // "" | "saved"
 
   const previewRef = useRef(null);
   const jumpTimerRef = useRef(null);
@@ -128,11 +149,15 @@ export default function Home() {
   const interactionRecorderStreamRef = useRef(null);
   const interactionRecorderChunksRef = useRef([]);
   const interactionRecorderTimerRef = useRef(null);
+  const autoSaveTimerRef = useRef(null);
+  // Prevent the first render's useEffect from overwriting localStorage with empty starter data
+  const isInitializedRef = useRef(false);
   const displayData = getResumeInLanguage(resumeData, lang);
 
   useEffect(() => {
     const restored = getInitialDraft();
     queueMicrotask(() => {
+      isInitializedRef.current = true;
       setFormData(restored);
       setResumeData(restored);
     });
@@ -140,12 +165,38 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!isInitializedRef.current) return; // skip the initial render with starter data
+    // Save page contents and project media to separate keys so large images
+    // don't blow the main draft's localStorage quota.
+    const pageContents = {};
+    const projectMedia = {};
+    (formData.projectItems || []).forEach((item, i) => {
+      if (item.pageContent) pageContents[i] = item.pageContent;
+      if (item.media) projectMedia[i] = item.media;
+    });
+    savePageContents(pageContents);
+    saveProjectMedia(projectMedia);
+    // Save truly lean draft — no images at all
     try {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
+      const leanFormData = {
+        ...formData,
+        projectItems: (formData.projectItems || []).map((item) => ({
+          ...item,
+          media: null,
+          pageContent: { sections: [] },
+        })),
+      };
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(leanFormData));
       window.localStorage.setItem(TEMPLATE_VERSION_KEY, defaultResumeTemplateVersion);
     } catch {
       // ignore storage failures
     }
+    // Flash the auto-saved indicator, debounced so it only shows after edits settle
+    clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      setAutoSaveStatus("saved");
+      autoSaveTimerRef.current = setTimeout(() => setAutoSaveStatus(""), 2000);
+    }, 800);
   }, [formData]);
 
   useEffect(
@@ -183,6 +234,19 @@ export default function Home() {
       reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsDataURL(file);
     });
+
+  const uploadToCloudinary = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error("Cloudinary upload failed");
+    const data = await res.json();
+    return data.secure_url;
+  };
 
   const isSupportedImageFile = (file) => {
     const lower = file.name.toLowerCase();
@@ -301,7 +365,7 @@ export default function Home() {
 
     setUploadStatus("上传中...");
     try {
-      const urls = await Promise.all(validFiles.map((file) => fileToDataUrl(file)));
+      const urls = await Promise.all(validFiles.map((file) => uploadToCloudinary(file)));
       const newItems = validFiles.map((file, index) => ({
         type,
         name: file.name,
@@ -357,7 +421,7 @@ export default function Home() {
 
     setCustomUploadStatus((prev) => ({ ...prev, [sectionIndex]: "上传中..." }));
     try {
-      const urls = await Promise.all(validFiles.map((file) => fileToDataUrl(file)));
+      const urls = await Promise.all(validFiles.map((file) => uploadToCloudinary(file)));
       const newItems = validFiles.map((file, index) => ({
         type,
         name: file.name,
@@ -409,7 +473,7 @@ export default function Home() {
 
     setProjectUploadStatus((prev) => ({ ...prev, [projectIndex]: "上传中..." }));
     try {
-      const url = await fileToDataUrl(file);
+      const url = await uploadToCloudinary(file);
       syncData((prev) => {
         const next = [...prev.projectItems];
         if (!next[projectIndex]) return prev;
@@ -446,7 +510,7 @@ export default function Home() {
     }
     setAboutUploadStatus("上传中...");
     try {
-      const url = await fileToDataUrl(file);
+      const url = await uploadToCloudinary(file);
       syncData((prev) => ({
         ...prev,
         aboutMedia: {
@@ -625,16 +689,79 @@ export default function Home() {
     syncData((prev) => ({ ...prev, projectItems: [...prev.projectItems, createProjectItem()] }));
   };
 
+  const moveProjectItem = (index, dir) => {
+    syncData((prev) => {
+      const next = [...prev.projectItems];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...prev, projectItems: next };
+    });
+  };
+
+  const duplicateProjectItem = (index) => {
+    if (formData.projectItems.length >= MAX_PROJECT_ITEMS) return;
+    const savedPageContents = loadPageContents();
+    const savedProjectMedia = loadProjectMedia();
+    syncData((prev) => {
+      const next = [...prev.projectItems];
+      const copy = JSON.parse(JSON.stringify(next[index]));
+      if (savedPageContents[index]) {
+        copy.pageContent = JSON.parse(JSON.stringify(savedPageContents[index]));
+      }
+      if (savedProjectMedia[index]) {
+        copy.media = JSON.parse(JSON.stringify(savedProjectMedia[index]));
+      }
+      next.splice(index + 1, 0, copy);
+      // Re-index and persist page contents + media immediately
+      const updatedPageContents = {};
+      const updatedProjectMedia = {};
+      next.forEach((item, i) => {
+        if (i <= index) {
+          updatedPageContents[i] = savedPageContents[i] ?? item.pageContent;
+          if (savedProjectMedia[i]) updatedProjectMedia[i] = savedProjectMedia[i];
+        } else if (i === index + 1) {
+          updatedPageContents[i] = copy.pageContent;
+          if (copy.media) updatedProjectMedia[i] = copy.media;
+        } else {
+          updatedPageContents[i] = savedPageContents[i - 1] ?? item.pageContent;
+          if (savedProjectMedia[i - 1]) updatedProjectMedia[i] = savedProjectMedia[i - 1];
+        }
+      });
+      savePageContents(updatedPageContents);
+      saveProjectMedia(updatedProjectMedia);
+      return { ...prev, projectItems: next };
+    });
+  };
+
   const removeProjectItem = (index) => {
+    const savedPageContents = loadPageContents();
+    const savedProjectMedia = loadProjectMedia();
     syncData((prev) => {
       const next = [...prev.projectItems];
       next.splice(index, 1);
+      const updatedPageContents = {};
+      const updatedProjectMedia = {};
+      next.forEach((item, i) => {
+        const oldIndex = i >= index ? i + 1 : i;
+        updatedPageContents[i] = savedPageContents[oldIndex] ?? item.pageContent;
+        if (savedProjectMedia[oldIndex]) updatedProjectMedia[i] = savedProjectMedia[oldIndex];
+      });
+      savePageContents(updatedPageContents);
+      saveProjectMedia(updatedProjectMedia);
       return { ...prev, projectItems: next };
     });
     setProjectUploadStatus((prev) => {
       const next = { ...prev };
       delete next[index];
       return next;
+    });
+    // Close page editor if the deleted project was open, shift index if needed
+    setPageEditorIndex((prev) => {
+      if (prev === null) return null;
+      if (prev === index) return null;
+      if (prev > index) return prev - 1;
+      return prev;
     });
   };
 
@@ -645,6 +772,24 @@ export default function Home() {
       next[index] = { ...next[index], [key]: value };
       return { ...prev, projectItems: next };
     });
+  };
+
+  const updateProjectPageContent = (index, updatedProject) => {
+    // Eagerly write to localStorage immediately so the project page can read
+    // the latest content even before the formData effect re-runs.
+    let saveOk = true;
+    if (updatedProject.pageContent) {
+      const pageContents = loadPageContents();
+      pageContents[index] = updatedProject.pageContent;
+      saveOk = savePageContents(pageContents);
+    }
+    syncData((prev) => {
+      const next = [...prev.projectItems];
+      if (!next[index]) return prev;
+      next[index] = updatedProject;
+      return { ...prev, projectItems: next };
+    });
+    return saveOk;
   };
 
   const clearProjectMedia = (index) => {
@@ -781,7 +926,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>MotionCV</title>
+        <title>haimeng's portfolio</title>
         <meta name="description" content="Input your info and generate your own resume website" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
@@ -793,7 +938,15 @@ export default function Home() {
             <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">编辑你的个人简历网站</h1>
             <p className="mt-2 text-sm text-[var(--muted)]">左侧整理信息，右侧查看对应分享页的精简预览。</p>
           </div>
-          <LanguageToggle lang={lang} onChange={setLang} />
+          <div className="flex items-center gap-4">
+            <span
+              className="text-xs text-[var(--muted)] transition-opacity duration-300"
+              style={{ opacity: autoSaveStatus === "saved" ? 1 : 0 }}
+            >
+              ✓ Auto-saved
+            </span>
+            <LanguageToggle lang={lang} onChange={setLang} />
+          </div>
         </div>
 
         <div className="editor-layout grid gap-6 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]">
@@ -969,14 +1122,47 @@ export default function Home() {
                 {formData.projectItems.map((project, index) => (
                   <div key={`project-item-${index}`} className="rounded-xl border p-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">项目 {index + 1}</p>
-                      <button
-                        type="button"
-                        onClick={() => removeProjectItem(index)}
-                        className="rounded-full border px-2 py-1 text-xs text-[var(--muted)]"
-                      >
-                        删除项目
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium">项目 {index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => moveProjectItem(index, -1)}
+                          disabled={index === 0}
+                          className="rounded p-0.5 text-xs text-[var(--muted)] transition hover:text-[var(--text)] disabled:opacity-30"
+                          aria-label="Move up"
+                        >↑</button>
+                        <button
+                          type="button"
+                          onClick={() => moveProjectItem(index, 1)}
+                          disabled={index === formData.projectItems.length - 1}
+                          className="rounded p-0.5 text-xs text-[var(--muted)] transition hover:text-[var(--text)] disabled:opacity-30"
+                          aria-label="Move down"
+                        >↓</button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPageEditorIndex(index)}
+                          className="rounded-full border border-[var(--text)] bg-[var(--text)] px-3 py-1 text-xs text-[var(--on-accent)] transition hover:opacity-80"
+                        >
+                          编辑页面
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => duplicateProjectItem(index)}
+                          disabled={formData.projectItems.length >= MAX_PROJECT_ITEMS}
+                          className="rounded-full border px-2 py-1 text-xs text-[var(--muted)] disabled:opacity-40"
+                        >
+                          复制
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeProjectItem(index)}
+                          className="rounded-full border px-2 py-1 text-xs text-[var(--muted)]"
+                        >
+                          删除项目
+                        </button>
+                      </div>
                     </div>
 
                     <label className="mt-3 block text-sm text-[var(--muted)]">
@@ -1226,6 +1412,16 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {pageEditorIndex !== null && formData.projectItems[pageEditorIndex] && (
+        <ProjectCaseStudyEditor
+          project={formData.projectItems[pageEditorIndex]}
+          onSave={(updatedProject) => {
+            return updateProjectPageContent(pageEditorIndex, updatedProject);
+          }}
+          onClose={() => setPageEditorIndex(null)}
+        />
+      )}
     </>
   );
 }

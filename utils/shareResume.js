@@ -38,6 +38,52 @@ export function decodeResumeData(encoded) {
 
 const SNAPSHOT_PREFIX = "motioncv:resume:";
 const EDITOR_DRAFT_KEY = "motioncv:editor:draft";
+const PAGE_CONTENTS_KEY = "motioncv:page-contents";
+// Project cover images stored separately to keep the main draft lean
+const PROJECT_MEDIA_KEY = "motioncv:project-media";
+
+// Page content (sections + images) is stored separately to avoid
+// hitting the main draft's localStorage quota.
+export function savePageContents(pageContentsMap) {
+  if (typeof window === "undefined") return true;
+  try {
+    window.localStorage.setItem(PAGE_CONTENTS_KEY, JSON.stringify(pageContentsMap));
+    return true;
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      return false;
+    }
+    return false;
+  }
+}
+
+export function loadPageContents() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(PAGE_CONTENTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+// Project media (cover images/videos) stored separately for the same reason.
+export function saveProjectMedia(mediaMap) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PROJECT_MEDIA_KEY, JSON.stringify(mediaMap));
+  } catch {}
+}
+
+export function loadProjectMedia() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(PROJECT_MEDIA_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
 
 function clearOldSnapshotsExcept(slug) {
   if (typeof window === "undefined") return;
