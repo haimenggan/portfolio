@@ -849,9 +849,13 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug, data: currentData }),
       });
+      const uploadJson = await uploadRes.json().catch(() => ({}));
       if (!uploadRes.ok) {
-        const err = await uploadRes.json().catch(() => ({}));
-        throw new Error(err.error || "Upload failed");
+        throw new Error(uploadJson.error || "Upload failed");
+      }
+      // Store the actual Cloudinary URL so the resume page can find it
+      if (uploadJson.url) {
+        window.localStorage.setItem(`motioncv:cloud-url:${slug}`, uploadJson.url);
       }
     } catch (err) {
       const msg = lang === "zh"

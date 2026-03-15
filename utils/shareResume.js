@@ -5,13 +5,21 @@ export function getCloudinaryResumeUrl(slug) {
 }
 
 export async function fetchCloudinaryResume(slug) {
-  try {
-    const res = await fetch(`${getCloudinaryResumeUrl(slug)}?_t=${Date.now()}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
+  const candidates = [
+    `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/resume-data/${encodeURIComponent(slug)}`,
+    `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/raw/upload/${encodeURIComponent(slug)}`,
+  ];
+  const ts = Date.now();
+  for (const url of candidates) {
+    try {
+      const res = await fetch(`${url}?_t=${ts}`);
+      if (!res.ok) continue;
+      return await res.json();
+    } catch {
+      // try next
+    }
   }
+  return null;
 }
 
 export function toSlug(name) {
