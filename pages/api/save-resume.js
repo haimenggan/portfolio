@@ -1,12 +1,7 @@
-import { v2 as cloudinary } from "cloudinary";
-
 export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "dvpd0p6si",
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const CLOUD = process.env.CLOUDINARY_CLOUD_NAME || "dvpd0p6si";
+const PRESET = process.env.CLOUDINARY_UPLOAD_PRESET || "portfolio_uploads";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -18,25 +13,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing slug or data" });
   }
 
-  if (!process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-    return res.status(500).json({ error: "Cloudinary credentials not configured on server" });
-  }
-
   try {
     const publicId = `resume-data/${encodeURIComponent(slug)}`;
     const jsonString = JSON.stringify(data);
 
-    const result = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { public_id: publicId, resource_type: "raw", overwrite: true },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      const { Readable } = require("stream");
-      Readable.from([Buffer.from(jsonString)]).pipe(uploadStream);
+    const fd = new FormData();
+    fd.append("file", new Blob([jsonString], { type: "application/json" }), `${slug}.json`);
+    fd.append("upload_preset", PRESET);
+    fd.append("public_id", publicId);
+
+    const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/raw/upload`, {
+      method: "POST",
+      body: fd,
     });
+
+    const result = await uploadRes.json();
+
+    if (!uploadRes.ok) {
+      return res.status(500).json({ error: result?.error?.message || "Upload failed" });
+    }
 
     return res.json({ ok: true, url: result.secure_url });
   } catch (err) {
