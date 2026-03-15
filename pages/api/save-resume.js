@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   // Cloudinary signed upload: sign sorted params + API secret
   const paramsToSign = `overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
   const signature = crypto
-    .createHash("sha256")
+    .createHash("sha1")
     .update(paramsToSign + API_SECRET)
     .digest("hex");
 
